@@ -21,7 +21,7 @@ def url_format_to_extension(format):
 def redir_to_s3(filename):
     url = s3.generate_presigned_url(
             ClientMethod='get_object',
-            Params= { 'Bucket': BUCKET, 'Key': KEY_PREFIX + filename }
+            Params= { 'Bucket': BUCKET, 'Key': KEY_PREFIX + filename, 'ResponseContentDisposition': 'attachment', 'ResponseCacheControl': 'max-age=31557600' }
         )
 
     return redirect(url)
