@@ -46,3 +46,8 @@ def download_original(tid):
         return redir_to_s3(filename)
     else:
         return redir_to_s3(tid + ".mp3")
+
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def fallback_to_main_domain(path):
+    return redirect("https://www.eqbeats.org" + request.full_path, code=307)
