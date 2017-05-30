@@ -1,5 +1,8 @@
-from flask import Flask, request, redirect
+from flask import Flask, request, redirect, Response
 import boto3
+from botocore.exceptions import ClientError
+from io import BytesIO
+from PIL import Image
 
 app = Flask("eqbeats-archive")
 
@@ -54,6 +57,27 @@ def download_original(tid):
 @app.route("/track/<tid>/art")
 def download_art(tid):
     return redir_to_s3("art/%s" % (tid,))
+
+@app.route("/track/<tid>/art/thumb")
+@app.route("/track/<tid>/art/medium")
+def thumbnail(tid):
+    type = request.path.split("/")[-1]
+    try:
+        obj = bucket.Object("art/" + tid).get()
+        objio = BytesIO(obj['Body'].read())
+        image = Image.open(objio)
+        image.thumbnail(
+            (1000,1000) if type == "medium"
+            else (128, 64)
+        )
+        outio = BytesIO()
+        image.save(outio, "jpeg", quality=93, progressive=True)
+        outio.seek(0)
+        return Response(outio.read(), 200, mimetype="image/jpeg")
+
+    except ClientError as _:
+        pass
+    return download_art(tid)
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
