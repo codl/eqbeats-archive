@@ -6,7 +6,7 @@ app = Flask("eqbeats-archive")
 s3 = boto3.client('s3')
 
 BUCKET = "eqbeats-archive"
-KEY_PREFIX = "tracks/"
+KEY_PREFIX = ""
 
 def url_format_to_extension(format):
     if format == "mp3":
@@ -18,11 +18,14 @@ def url_format_to_extension(format):
     else:
         return "opus"
 
-def redir_to_s3(filename):
-    url = s3.generate_presigned_url(
-            ClientMethod='get_object',
-            Params= { 'Bucket': BUCKET, 'Key': KEY_PREFIX + filename, 'ResponseContentDisposition': 'attachment', 'ResponseCacheControl': 'max-age=31557600' }
-        )
+def redir_to_s3(filename, attachment=False):
+    params = {
+            'Bucket': BUCKET,
+            'Key': KEY_PREFIX + filename,
+            'ResponseContentDisposition': 'attachment' if attachment else 'inline',
+            'ResponseCacheControl': 'max-age=31557600'
+    }
+    url = s3.generate_presigned_url(ClientMethod='get_object', Params=params)
 
     return redirect(url)
 
@@ -35,17 +38,21 @@ def download(tid):
     format = request.path.split("/")[-1]
     ext = url_format_to_extension(format)
 
-    return redir_to_s3("%s.%s" % (tid, ext))
+    return redir_to_s3("tracks/%s.%s" % (tid, ext), attachment=True)
 
 @app.route("/track/<tid>/original")
 def download_original(tid):
     resp = s3.list_objects_v2(Bucket=BUCKET,
-            Prefix=KEY_PREFIX + tid + ".orig")
+            Prefix="%stracks/%s.orig" % (KEY_PREFIX, tid))
     if(resp['KeyCount'] > 0):
         filename = resp['Contents'][0]['Key'].replace(KEY_PREFIX, "", 1)
         return redir_to_s3(filename)
     else:
-        return redir_to_s3(tid + ".mp3")
+        return redir_to_s3("tracks/%s.mp3" %(tid,))
+
+@app.route("/track/<tid>/art")
+def download_art(tid):
+    return redir_to_s3("art/%s" % (tid,))
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
