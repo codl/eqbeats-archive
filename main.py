@@ -4,6 +4,7 @@ import boto3
 from botocore.exceptions import ClientError
 from io import BytesIO
 from PIL import Image
+import threading
 
 app = Flask("eqbeats-archive")
 
@@ -11,8 +12,10 @@ s3 = boto3.resource('s3')
 s3client = boto3.client('s3')
 
 BUCKET = "eqbeats-archive"
+BUCKET_DYN = "eqbeats-dynamic"
 
 bucket = s3.Bucket(BUCKET)
+bucket_dyn = s3.Bucket(BUCKET_DYN)
 
 def url_format_to_extension(format):
     if format == "mp3":
@@ -74,22 +77,35 @@ def download_art(tid):
 @app.route("/track/<tid>/art/medium")
 def thumbnail(tid):
     type = request.path.split("/")[-1]
+    dyn_key = "%s/%s" % (type, tid)
     try:
-        obj = bucket.Object("art/" + tid).get()
-        objio = BytesIO(obj['Body'].read())
-        image = Image.open(objio)
-        image = image.convert("RGB")
-        image.thumbnail(
-            (1000,1000) if type == "medium"
-            else (128, 64)
+        obj = bucket_dyn.Object(dyn_key)
+        obj.load()
+        return s3_proxy(dyn_key, BUCKET_DYN,
+                headers={"content-type": "image/jpeg"}
         )
-        outio = BytesIO()
-        image.save(outio, "jpeg", quality=93, progressive=True)
-        outio.seek(0)
-        return Response(outio.read(), 200, mimetype="image/jpeg")
-
     except ClientError as _:
-        pass
+        try:
+            obj = bucket.Object("art/" + tid).get()
+            objio = BytesIO(obj['Body'].read())
+            image = Image.open(objio)
+            image = image.convert("RGB")
+            image.thumbnail(
+                (1000,1000) if type == "medium"
+                else (128, 64)
+            )
+            outio = BytesIO()
+            image.save(outio, "jpeg", quality=93, progressive=True)
+            outio.seek(0)
+            outcopy = BytesIO(outio.getvalue())
+            def upload():
+                bucket_dyn.Object(dyn_key).put(Body=outio.getvalue(), ContentType="image/jpeg")
+                print("done uploading!")
+            threading.Thread(target=upload).run()
+            return Response(outio.read(), 200, mimetype="image/jpeg")
+
+        except ClientError as _:
+            pass
     return download_art(tid)
 
 @app.route('/', defaults={'path': ''})
