@@ -3,10 +3,12 @@ import boto3
 
 app = Flask("eqbeats-archive")
 
-s3 = boto3.client('s3')
+s3 = boto3.resource('s3')
+s3client = boto3.client('s3')
 
 BUCKET = "eqbeats-archive"
-KEY_PREFIX = ""
+
+bucket = s3.Bucket(BUCKET)
 
 def url_format_to_extension(format):
     if format == "mp3":
@@ -21,11 +23,11 @@ def url_format_to_extension(format):
 def redir_to_s3(filename, attachment=False):
     params = {
             'Bucket': BUCKET,
-            'Key': KEY_PREFIX + filename,
+            'Key': filename,
             'ResponseContentDisposition': 'attachment' if attachment else 'inline',
             'ResponseCacheControl': 'max-age=31557600'
     }
-    url = s3.generate_presigned_url(ClientMethod='get_object', Params=params)
+    url = s3client.generate_presigned_url(ClientMethod='get_object', Params=params)
 
     return redirect(url)
 
@@ -42,10 +44,9 @@ def download(tid):
 
 @app.route("/track/<tid>/original")
 def download_original(tid):
-    resp = s3.list_objects_v2(Bucket=BUCKET,
-            Prefix="%stracks/%s.orig" % (KEY_PREFIX, tid))
-    if(resp['KeyCount'] > 0):
-        filename = resp['Contents'][0]['Key'].replace(KEY_PREFIX, "", 1)
+    objects = list(bucket.objects.filter(Prefix="tracks/%s.orig" % (tid,)))
+    if(len(objects) > 0):
+        filename = objects[0].key
         return redir_to_s3(filename)
     else:
         return redir_to_s3("tracks/%s.mp3" %(tid,))
