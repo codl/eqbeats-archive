@@ -78,6 +78,7 @@ def thumbnail(tid):
         obj = bucket.Object("art/" + tid).get()
         objio = BytesIO(obj['Body'].read())
         image = Image.open(objio)
+        image = image.convert("RGB")
         image.thumbnail(
             (1000,1000) if type == "medium"
             else (128, 64)
