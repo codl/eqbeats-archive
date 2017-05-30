@@ -37,17 +37,23 @@ def s3_proxy(key, bucket=bucket.name, headers={}):
             while buf:
                 yield buf
                 buf = resp['Body'].read(1024)
+
+        status = 200
+
         full_headers = Headers()
         full_headers.set('content-length', resp['ContentLength'])
         full_headers.set('content-type', resp['ContentType'])
         full_headers.set('cache-control', 'max-age=43200')
         full_headers.set('accept-ranges', resp['AcceptRanges'])
-        full_headers.set('content-range', resp['ContentRange'])
+        if 'ContentRange' in resp:
+            full_headers.set('content-range', resp['ContentRange'])
+            status = 206
         full_headers.set('etag', resp['ETag'])
 
         for key in headers:
             full_headers.set(key, headers[key])
-        return Response(stream(), 206 if resp['ContentRange'] else 200, headers=full_headers)
+
+        return Response(stream(), status, headers=full_headers)
     except ClientError as e:
         return Response(
                 e.response['Error']['Code'],
