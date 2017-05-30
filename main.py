@@ -93,9 +93,6 @@ def thumbnail(tid):
     return download_art(tid)
 
 @app.route('/', defaults={'path': ''})
-def test(path):
-    return s3_proxy("hjklhkj")
-
 @app.route('/<path:path>')
 def fallback_to_main_domain(path):
     return redirect("https://www.eqbeats.org" + request.full_path, code=307)
