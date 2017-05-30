@@ -1,4 +1,5 @@
 from flask import Flask, request, redirect, Response
+from werkzeug.datastructures import Headers
 import boto3
 from botocore.exceptions import ClientError
 from io import BytesIO
@@ -23,17 +24,27 @@ def url_format_to_extension(format):
     else:
         return "opus"
 
-def redir_to_s3(filename, attachment=False):
-    params = {
-            'Bucket': BUCKET,
-            'Key': filename,
-            'ResponseContentDisposition': 'attachment' if attachment else 'inline',
-            'ResponseCacheControl': 'max-age=31557600'
-    }
-    url = s3client.generate_presigned_url(ClientMethod='get_object', Params=params)
-
-    return redirect(url)
-
+def s3_proxy(key, bucket=bucket.name, headers={}):
+    obj = s3.Object(bucket, key)
+    try:
+        resp = obj.get()
+        def stream():
+            yield b""
+            buf = resp['Body'].read(1024)
+            while buf:
+                yield buf
+                buf = resp['Body'].read(1024)
+        full_headers = Headers()
+        full_headers.set('content-length', resp['ContentLength'])
+        full_headers.set('content-type', resp['ContentType'])
+        full_headers.set('cache-control', 'max-age=43200')
+        for key in headers:
+            full_headers.set(key, headers[key])
+        return Response(stream(), headers=full_headers)
+    except ClientError as e:
+        return Response(
+                e.response['Error']['Code'],
+                e.response['ResponseMetadata']['HTTPStatusCode'])
 
 @app.route("/track/<tid>/mp3")
 @app.route("/track/<tid>/aac")
@@ -43,20 +54,21 @@ def download(tid):
     format = request.path.split("/")[-1]
     ext = url_format_to_extension(format)
 
-    return redir_to_s3("tracks/%s.%s" % (tid, ext), attachment=True)
+    return s3_proxy("tracks/%s.%s" % (tid, ext),
+            headers={"content-disposition": "attachment"})
 
 @app.route("/track/<tid>/original")
 def download_original(tid):
     objects = list(bucket.objects.filter(Prefix="tracks/%s.orig" % (tid,)))
     if(len(objects) > 0):
         filename = objects[0].key
-        return redir_to_s3(filename)
+        return s3_proxy(filename)
     else:
-        return redir_to_s3("tracks/%s.mp3" %(tid,))
+        return s3_proxy("tracks/%s.mp3" %(tid,))
 
 @app.route("/track/<tid>/art")
 def download_art(tid):
-    return redir_to_s3("art/%s" % (tid,))
+    return s3_proxy("art/%s" % (tid,))
 
 @app.route("/track/<tid>/art/thumb")
 @app.route("/track/<tid>/art/medium")
@@ -80,6 +92,9 @@ def thumbnail(tid):
     return download_art(tid)
 
 @app.route('/', defaults={'path': ''})
+def test(path):
+    return s3_proxy("hjklhkj")
+
 @app.route('/<path:path>')
 def fallback_to_main_domain(path):
     return redirect("https://www.eqbeats.org" + request.full_path, code=307)
