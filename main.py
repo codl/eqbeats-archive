@@ -100,7 +100,6 @@ def thumbnail(tid):
             outcopy = BytesIO(outio.getvalue())
             def upload():
                 bucket_dyn.Object(dyn_key).put(Body=outio.getvalue(), ContentType="image/jpeg")
-                print("done uploading!")
             threading.Thread(target=upload).run()
             return Response(outio.read(), 200, mimetype="image/jpeg")
 
