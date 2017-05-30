@@ -115,6 +115,8 @@ def thumbnail(tid):
 
         except ClientError as _:
             pass
+        except OSError as _:
+            pass
     return download_art(tid)
 
 @app.route('/', defaults={'path': ''})
